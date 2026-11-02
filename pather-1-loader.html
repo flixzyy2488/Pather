@@ -1,0 +1,86 @@
+<!-- Pather loader. Paste into a Code Embed where the app should appear. It rarely changes. -->
+<!-- Size the app by editing height on the #pather div below; the app fills it. -->
+<div id="pather" style="width:100%;height:100vh;min-height:600px;background:#040506"></div>
+<script>
+/* Cesium ion token. Restrict it to your site in the ion dashboard (Access Tokens > Allowed URLs). */
+window.PATHER_CONFIG={
+  "ionToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6Ik16SmVjWUNyTlVFZGlfZjYiLCJqdGkiOiJjY2FjMWI2Ny1hNGQ4LTRhN2QtYmFkOC03OWQ1OWY1MTc3NDkiLCJpZCI6NDczMTgwLCJzdWIiOiJBcnRlbWlEZW1pc2hldiIsImlzcyI6Imh0dHBzOi8vYXBpLmNlc2l1bS5jb20iLCJhdWQiOiJHUkdQIiwiaWF0IjoxNzg3ODAxMTc5fQ.iRWkv2QQjfJBnVzAFftZjRtt0P_8WeFDFzh5PXGCy_s",
+  "modelBase": "https://cdn.jsdelivr.net/gh/flixzyy2488/Pather@main/"
+};
+/* modelBase: URL (ending in /) where "Assembled Artemis.glb" and "Assembled UAV.glb" are hosted. Leave empty for the built-in box stand-ins. */
+(function(){
+  var GROUPS=["css","react","engine","app"];
+  var CESIUM_BASE="https://cdn.jsdelivr.net/npm/cesium@1.144.0/Build/Cesium/";
+  /*
+   * Runs inside the frame, before Cesium loads. Cesium decides whether a worker
+   * is cross-origin by comparing window.location with the worker URL; in a
+   * srcdoc frame that is about:srcdoc, so every worker looks cross-origin and
+   * is wrapped in a blob that imports a bare module id, which cannot resolve.
+   * Give those wrappers the absolute URL of the worker module instead.
+   */
+  function fixWorkers(P){
+    var B=Blob;
+    window.Blob=function(a,o){
+      if(a&&a.length===1&&typeof a[0]==='string'){
+        a=[a[0].replace(/^import "([A-Za-z0-9_/-]+)";$/,function(_,id){return 'import "'+P+id+'.js";';})];
+      }
+      return new B(a,o);
+    };
+    window.Blob.prototype=B.prototype;
+  }
+  function complete(P,g){
+    var e=P[g];
+    if(!e||!e.n)return false;
+    for(var i=0;i<e.n;i++)if(typeof e.p[i]!=='string')return false;
+    return true;
+  }
+  function unpack(e){
+    var bin=atob(Array.from({length:e.n},function(_,i){return e.p[i];}).join(''));
+    var bytes=new Uint8Array(bin.length);
+    for(var j=0;j<bin.length;j++)bytes[j]=bin.charCodeAt(j);
+    return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  }
+  function boot(){
+    var P=window.__patherParts||{};
+    var host=document.getElementById('pather');
+    if(!host||window.__patherStarted)return;
+    for(var k=0;k<GROUPS.length;k++)if(!complete(P,GROUPS[k]))return;
+    window.__patherStarted=true;
+    Promise.all(GROUPS.map(function(g){return unpack(P[g]);})).then(function(t){
+      var css=t[0],react=t[1],engine=t[2],app=t[3];
+      var cfg=window.PATHER_CONFIG||{};
+      var frame=document.createElement('iframe');
+      frame.title='Pather';
+      frame.setAttribute('allow','fullscreen');
+      frame.style.cssText='width:100%;height:100%;border:0;display:block';
+      frame.srcdoc='<!doctype html><html><head><meta charset="utf-8">'
+        +'<meta name="viewport" content="width=device-width,initial-scale=1">'
+        +'<link rel="stylesheet" href="'+CESIUM_BASE+'Widgets/widgets.css">'
+        +'<style>'+css+'</style>'
+        +'<script>window.CESIUM_BASE_URL="'+CESIUM_BASE+'";('+fixWorkers.toString()+')("'+CESIUM_BASE+'Workers/");</scr'+'ipt>'
+        +'<script src="'+CESIUM_BASE+'Cesium.js"><\/script>'
+        +'</head><body><div id="root"></div></body></html>';
+      frame.onload=function(){
+        var w=frame.contentWindow;
+        w.PATHER_ION_TOKEN=cfg.ionToken||'';
+        w.PATHER_MODEL_BASE=cfg.modelBase||'';
+        w.PATHER_DEBUG=!!cfg.debug;
+        w.PATHER_WORKER_SRC=engine;
+        function run(src){
+          return new Promise(function(done){
+            var s=w.document.createElement('script');
+            s.src=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+            s.onload=done;
+            w.document.body.appendChild(s);
+          });
+        }
+        run(react).then(function(){return run(app);});
+      };
+      host.appendChild(frame);
+    }).catch(function(e){host.textContent='Pather failed to start: '+e.message;});
+  }
+  window.__patherBoot=boot;
+  document.addEventListener('DOMContentLoaded',boot);
+  boot();
+})();
+</script>
